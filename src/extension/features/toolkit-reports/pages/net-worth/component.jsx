@@ -68,7 +68,15 @@ export class NetWorthComponent extends React.Component {
       chart: { renderTo: 'tk-net-worth-chart' },
       legend: { enabled: false },
       title: { text: '' },
-      tooltip: { enabled: false },
+      tooltip: {
+        useHTML: true,
+        pointFormatter: function() {
+          let coloredPoint = `<span style="color:${this.color}">\u25CF</span>`;
+          let totalAmount = formatCurrency(this.y, false);
+          let tooltip = `${coloredPoint} ${this.series.name}: <b>${totalAmount}</b><br/>`;
+          return tooltip;
+        },
+      },
       xAxis: { categories: labels },
       yAxis: {
         title: { text: '' },
