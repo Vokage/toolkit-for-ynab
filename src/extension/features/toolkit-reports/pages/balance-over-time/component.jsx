@@ -6,7 +6,7 @@ import { FiltersPropType } from 'toolkit-reports/common/components/report-contex
 import { showTransactionModal } from 'toolkit-reports/utils/show-transaction-modal';
 import { mapAccountsToTransactions, generateDataPointsMap } from './utils';
 import { getEntityManager } from 'toolkit/extension/utils/ynab';
-
+import './styles.scss';
 /**
  * Component representing the Balance Over Time Report
  */
@@ -19,7 +19,10 @@ export class BalanceOverTimeComponent extends React.Component {
 
   constructor(props) {
     super(props);
-    this.state = {};
+    this.state = {
+      shouldGroupAccounts: false,
+    };
+    this._handleCheckboxClick = this._handleCheckboxClick.bind(this);
   }
 
   /**
@@ -43,12 +46,15 @@ export class BalanceOverTimeComponent extends React.Component {
    * Update the state if the filters or transactions have changed
    * @param {*} prevProps The previous props used to compare against
    */
-  componentDidUpdate(prevProps) {
+  componentDidUpdate(prevProps, prevState) {
     // Recalculate our data if new transactions were reported
     if (this.props.allReportableTransactions !== prevProps.allReportableTransactions) {
       this._calculateData(this.props.allReportableTransactions);
       this._updateCurrentDataSet();
-    } else if (this.props.filters !== prevProps.filters) {
+    } else if (
+      this.props.filters !== prevProps.filters ||
+      this.state.shouldGroupAccounts !== prevState.shouldGroupAccounts
+    ) {
       this._updateCurrentDataSet();
     }
   }
@@ -80,6 +86,13 @@ export class BalanceOverTimeComponent extends React.Component {
     this.setState({
       accountToTransactionsMap,
       accountToDataPointsMap,
+      sortedTransactions,
+    });
+  }
+
+  _handleCheckboxClick() {
+    this.setState({
+      shouldGroupAccounts: !this.state.shouldGroupAccounts,
     });
   }
 
@@ -88,7 +101,22 @@ export class BalanceOverTimeComponent extends React.Component {
    */
   render() {
     return (
-      <div className="tk-highcharts-report-container" id="tk-balance-over-time-report-graph" />
+      <div>
+        <div id="group-checkbox-container">
+          <input
+            type="checkbox"
+            id="group-account-checkbox"
+            name="Group Accounts"
+            value={this.state.shouldGroupAccounts}
+            onClick={this._handleCheckboxClick}
+          />
+          <span id="group-account-label">Group Accounts</span>
+        </div>
+        <div
+          className="tk-highcharts-report-container"
+          id="tk-balance-over-time-report-graph"
+        ></div>
+      </div>
     );
   }
 
@@ -97,8 +125,8 @@ export class BalanceOverTimeComponent extends React.Component {
    */
   _updateCurrentDataSet() {
     const { filters } = this.props;
-    const { accountToDataPointsMap } = this.state;
-    if (!filters || !accountToDataPointsMap) return;
+    const { accountToDataPointsMap, sortedTransactions } = this.state;
+    if (!filters || !accountToDataPointsMap || !sortedTransactions) return;
 
     const accountFilters = filters.accountFilterIds;
     const { fromDate, toDate } = filters.dateFilter;
@@ -117,15 +145,30 @@ export class BalanceOverTimeComponent extends React.Component {
       }
     });
 
-    // Using our filtered data convert them to the highseries points
     let series = [];
-    filteredData.forEach((datapoints, accountId) => {
-      series.push({
-        name: getEntityManager().getAccountById(accountId).accountName,
-        data: this._dataPointsToHighChartSeries(datapoints),
-      });
-    });
 
+    if (this.state.shouldGroupAccounts) {
+      let applicableTransactions = sortedTransactions.filter(transaction => {
+        return (
+          transaction.date.getUTCTime() >= fromDate.getUTCTime() &&
+          transaction.date.getUTCTime() <= toDate.getUTCTime() &&
+          !accountFilters.has(transaction.accountId)
+        );
+      });
+
+      series.push({
+        name: 'Grouped Accounts',
+        data: this._dataPointsToHighChartSeries(generateDataPointsMap(applicableTransactions)),
+      });
+    } else {
+      filteredData.forEach((datapoints, accountId) => {
+        series.push({
+          name: getEntityManager().getAccountById(accountId).accountName,
+          data: this._dataPointsToHighChartSeries(datapoints),
+        });
+      });
+    }
+    console.log(series);
     this.setState(
       {
         filteredData: filteredData,
@@ -150,6 +193,7 @@ export class BalanceOverTimeComponent extends React.Component {
         transactions: values.transactions,
       });
     });
+    resultData.sort((datapoint1, datapoint2) => datapoint1.x - datapoint2.x);
     return resultData;
   }
 
