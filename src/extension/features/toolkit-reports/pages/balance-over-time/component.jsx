@@ -6,6 +6,7 @@ import { FiltersPropType } from 'toolkit-reports/common/components/report-contex
 import { showTransactionModal } from 'toolkit-reports/utils/show-transaction-modal';
 import { mapAccountsToTransactions, generateDataPointsMap } from './utils';
 import { getEntityManager } from 'toolkit/extension/utils/ynab';
+import { LabeledCheckbox } from 'toolkit-reports/common/components/labeled-checkbox';
 import './styles.scss';
 /**
  * Component representing the Balance Over Time Report
@@ -101,21 +102,17 @@ export class BalanceOverTimeComponent extends React.Component {
    */
   render() {
     return (
-      <div>
-        <div id="group-checkbox-container">
-          <input
-            type="checkbox"
-            id="group-account-checkbox"
-            name="Group Accounts"
-            value={this.state.shouldGroupAccounts}
-            onClick={this._handleCheckboxClick}
+      <div className="tk-flex-grow tk-flex tk-flex-column">
+        <div className="tk-balance-over-time-group-accounts-checkbox">
+          <LabeledCheckbox
+            checked={this.state.shouldGroupAccounts}
+            label="Group Accounts"
+            onChange={this._handleCheckboxClick}
           />
-          <span id="group-account-label">Group Accounts</span>
         </div>
-        <div
-          className="tk-highcharts-report-container"
-          id="tk-balance-over-time-report-graph"
-        ></div>
+        <div className="tk-flex tk-flex-grow">
+          <div className="tk-highcharts-report-container" id="tk-balance-over-time-report-graph" />
+        </div>
       </div>
     );
   }
