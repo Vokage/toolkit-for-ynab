@@ -4,9 +4,8 @@ import * as PropTypes from 'prop-types';
 import { formatCurrency } from 'toolkit/extension/utils/currency';
 import { FiltersPropType } from 'toolkit-reports/common/components/report-context/component';
 import { showTransactionModal } from 'toolkit-reports/utils/show-transaction-modal';
-import { mapAccountsToTransactions, generateDataPointsMap } from './utils';
-import { getEntityManager } from 'toolkit/extension/utils/ynab';
 import { LabeledCheckbox } from 'toolkit-reports/common/components/labeled-checkbox';
+import { getEntityManager } from 'toolkit/extension/utils/ynab';
 import './styles.scss';
 /**
  * Component representing the Balance Over Time Report
@@ -22,75 +21,49 @@ export class BalanceOverTimeComponent extends React.Component {
     super(props);
     this.state = {
       shouldGroupAccounts: false,
+      isLoading: false,
     };
     this._handleCheckboxClick = this._handleCheckboxClick.bind(this);
   }
 
-  /**
-   * Prepare our data by mapping generating all our datapoints
-   */
-  componentWillMount() {
-    if (this.props.filters && this.props.allReportableTransactions) {
-      this._calculateData(this.props.allReportableTransactions);
-      this._updateCurrentDataSet();
-    }
-  }
-
-  /**
-   * When we first render, update our data set
-   */
   componentDidMount() {
-    this._updateCurrentDataSet();
+    this._calculateData();
   }
 
-  /**
-   * Update the state if the filters or transactions have changed
-   * @param {*} prevProps The previous props used to compare against
-   */
-  componentDidUpdate(prevProps, prevState) {
-    // Recalculate our data if new transactions were reported
-    if (this.props.allReportableTransactions !== prevProps.allReportableTransactions) {
-      this._calculateData(this.props.allReportableTransactions);
-      this._updateCurrentDataSet();
-    } else if (
-      this.props.filters !== prevProps.filters ||
-      this.state.shouldGroupAccounts !== prevState.shouldGroupAccounts
-    ) {
-      this._updateCurrentDataSet();
+  _getDatesBetween(startDate, endDate) {
+    var dates = new Map();
+
+    var currDate = moment(startDate.clone()).startOf('day');
+    var lastDate = moment(endDate).startOf('day');
+
+    while (!currDate.isSameOrBefore(lastDate)) {
+      console.log(currDate.toDate());
+      dates.set(currDate, []);
+      currDate.add(1, 'days');
     }
+
+    return dates;
+  }
+
+  _calculateData() {
+    this.setState({ ...this.state, isLoading: true });
+    console.log('Calculating data...');
+    const { allReportableTransactions, accountFilterIds, dateFilter } = this.props;
+
+    // Get our first and last months of the budget
+    const budgetStart = getEntityManager().getFirstMonthForBudget();
+    const budgetEnd = getEntityManager().getLastMonthForBudget();
+    let currentDate = budgetStart;
+
+    // Create a map for all dates in between
+    let dateToTransactionsMap = this._getDatesBetween(budgetStart, budgetEnd);
+    debugger;
+    this.setState({ ...this.state, isLoading: false });
   }
 
   /**
-   * Given a transactions list, update the state by recalculating the datapoints
-   * Updates the state to the reflect the new data points
-   * @param {*} transactions The transactions to use
+   * Click Handler for our checkbox
    */
-  _calculateData(transactions) {
-    if (!transactions || transactions.length === 0) return;
-
-    // Sort our transactions by date
-    let sortedTransactions = transactions.sort(
-      (t1, t2) => t1.date.getUTCTime() - t2.date.getUTCTime()
-    );
-
-    // Map each account to all their transactions
-    let accountToTransactionsMap = mapAccountsToTransactions(sortedTransactions);
-
-    // Generate our datapoints for each account
-    let accountToDataPointsMap = new Map();
-    accountToTransactionsMap.forEach((transactionsForAcc, accountId) => {
-      let datapoints = generateDataPointsMap(transactionsForAcc);
-      accountToDataPointsMap.set(accountId, datapoints);
-    });
-
-    // Update our state to reflect the datapoints
-    this.setState({
-      accountToTransactionsMap,
-      accountToDataPointsMap,
-      sortedTransactions,
-    });
-  }
-
   _handleCheckboxClick() {
     this.setState({
       shouldGroupAccounts: !this.state.shouldGroupAccounts,
@@ -101,10 +74,15 @@ export class BalanceOverTimeComponent extends React.Component {
    * Render the container for the Chart
    */
   render() {
+    if (this.state.isLoading) {
+      return <div> Loading... Please wait. </div>;
+    }
+
     return (
       <div className="tk-flex-grow tk-flex tk-flex-column">
         <div className="tk-balance-over-time-group-accounts-checkbox">
           <LabeledCheckbox
+            id="tk-group-accounts-checkbox"
             checked={this.state.shouldGroupAccounts}
             label="Group Accounts"
             onChange={this._handleCheckboxClick}
@@ -114,64 +92,6 @@ export class BalanceOverTimeComponent extends React.Component {
           <div className="tk-highcharts-report-container" id="tk-balance-over-time-report-graph" />
         </div>
       </div>
-    );
-  }
-
-  /**
-   * Use the current filters and data points map to update the data points
-   */
-  _updateCurrentDataSet() {
-    const { filters } = this.props;
-    const { accountToDataPointsMap, sortedTransactions } = this.state;
-    if (!filters || !accountToDataPointsMap || !sortedTransactions) return;
-
-    const accountFilters = filters.accountFilterIds;
-    const { fromDate, toDate } = filters.dateFilter;
-
-    // Filter out the accounts and transactions we don't want to include
-    let filteredData = new Map();
-    accountToDataPointsMap.forEach((datapoints, accountId) => {
-      if (!accountFilters.has(accountId)) {
-        let filteredDatapoints = new Map();
-        datapoints.forEach((data, dateUTC) => {
-          if (dateUTC >= fromDate.getUTCTime() && dateUTC <= toDate.getUTCTime()) {
-            filteredDatapoints.set(dateUTC, data);
-          }
-        });
-        filteredData.set(accountId, filteredDatapoints);
-      }
-    });
-
-    let series = [];
-
-    if (this.state.shouldGroupAccounts) {
-      let applicableTransactions = sortedTransactions.filter(transaction => {
-        return (
-          transaction.date.getUTCTime() >= fromDate.getUTCTime() &&
-          transaction.date.getUTCTime() <= toDate.getUTCTime() &&
-          !accountFilters.has(transaction.accountId)
-        );
-      });
-
-      series.push({
-        name: 'Grouped Accounts',
-        data: this._dataPointsToHighChartSeries(generateDataPointsMap(applicableTransactions)),
-      });
-    } else {
-      filteredData.forEach((datapoints, accountId) => {
-        series.push({
-          name: getEntityManager().getAccountById(accountId).accountName,
-          data: this._dataPointsToHighChartSeries(datapoints),
-        });
-      });
-    }
-    console.log(series);
-    this.setState(
-      {
-        filteredData: filteredData,
-        series: series,
-      },
-      this._renderChart
     );
   }
 
