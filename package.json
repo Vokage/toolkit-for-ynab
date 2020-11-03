@@ -88,6 +88,7 @@
     }
   },
   "dependencies": {
+    "@testing-library/react": "^11.1.0",
     "classnames": "^2.2.6",
     "core-js": "2",
     "fuzzysort": "^1.1.4",

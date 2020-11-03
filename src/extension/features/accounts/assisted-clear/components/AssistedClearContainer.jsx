@@ -50,10 +50,12 @@ export const ClearAssistantContainer = ({ reconcileInputValue }) => {
         clearedTotal={clearedTotal}
         target={target}
         matchingTransactions={matchingTransactions}
+        data-testid={'assisted-clear-modal'}
       />
       <button
         className={`button-primary button${reconcileInputValue.length ? '' : ' button-disabled'}`}
         onClick={onSubmit}
+        data-testid={'assisted-clear-button'}
         onMouseEnter={() => {
           setIsToolTipVisible(true);
         }}
@@ -64,7 +66,7 @@ export const ClearAssistantContainer = ({ reconcileInputValue }) => {
         Use Assisted Clear
       </button>
       {isToolTipVisible && (
-        <span className="tk-tooltip">
+        <span className="tk-tooltip" data-testid={'assisted-clear-tooltip'}>
           Determine if any combination of uncleared transactions adds up to the difference between
           the YNAB account balance and the actual account balance
         </span>
